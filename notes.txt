@@ -1,0 +1,17 @@
+
+#Quadratic function of distance between em and target (after his next jump)
+#(the same as a surprisal)
+#Exact free energy == surprisal
+#Don't need VFE
+
+#(Chapter 7 James Probability Theory the Logic of Science)
+
+
+
+
+## Step 2:
+#The agent can't move as fas as it wants
+
+## Step 3: 
+#Observations depend on actions
+
