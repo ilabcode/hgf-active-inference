@@ -6,12 +6,22 @@
 
 #(Chapter 7 James Probability Theory the Logic of Science)
 
+#Comparing inferred: actually means that false inference can lead to less surprise
 
 
 
-## Step 2:
-#The agent can't move as fas as it wants
 
-## Step 3: 
-#Observations depend on actions
 
+
+
+
+
+
+
+#Inference on exponential families using mean tracking
+
+#Extend to non-staitonarity
+
+#Extend to active inference
+
+#Have a look at the math
