@@ -1,32 +1,26 @@
 #Questions:
 # Parameters
-#  Which hgf parameters? Optimize?
+#  Which hgf parameters?
+#     Should I optimize on each timestep? (parameter learning)
+#     Should Rho be learnt?
 #  Which generative process parameters? Especially gamma parameters.
 #  Which noise parameters?
-#  How does the rho parameter work?
-# Enrionment
+# Environment
 #  How do I include a rho drift?
 # Active Inference
 #  (Explicit) goal prior
 #  Inferring own actions
-# Where is the break in the perception-action cycle?
-# Moving on a circle versus moving on a line
 
 #Extensions
-# Infer own position
 # Include drift
-# Making actions more predictive
+# Enable explicit Active Inference
+# Enable sufficient statistics filtering
+# Infer own position
+# Make things happen on an actual circle (modulo or radians)
 # Add a parent to the volatility (or just blocks with varying volatility)
 # Make the agent only be able to (prefer to) move some length
 # Make the agent's observations depend on the distance to the target
-# Make the agent able to affect the hidden states (maybe the target movement's drift?)
-
-
-
-
-#Take modulo of position for the cirle thing
-
-
+# Make the agent able to affect the hidden states (maybe the target's drift?)
 
 
 
@@ -34,13 +28,14 @@
 import sys
 sys.path.append('ghgf')
 import hgf
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-from scipy.optimize import minimize
-import math
-import imageio
 import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import imageio
+from scipy.optimize import minimize
+
+
 
 
 #-- Settings --#
@@ -52,6 +47,11 @@ gamma_params = [2,0.05]
 init_target_position = 0
 
 #Agent
+agent_position_observation_noise = 0
+target_position_observation_noise = 0.5
+agent_movement_noise = 0.1
+init_agent_position = 0
+
 hgf_target_position = hgf.StandardHGF(initial_mu1=0,
                          initial_pi1=1e4,
                          omega1=2,
@@ -62,10 +62,18 @@ hgf_target_position = hgf.StandardHGF(initial_mu1=0,
                          omega_input=-1,
                          rho1 = 0,
                          rho2 = 0)
-agent_position_observation_noise = 0
-target_position_observation_noise = 0.5
-agent_movement_noise = 0.1
-init_agent_position = 0
+                         
+hgf_target_noise = hgf.StandardHGF(initial_mu1=0,
+                         initial_pi1=1e4,
+                         omega1=2,
+                         kappa1=1,
+                         initial_mu2=1,
+                         initial_pi2=1e1,
+                         omega2=-2,
+                         omega_input=-1,
+                         rho1 = 0,
+                         rho2 = 0)
+
 
 
 #-- Functions --#
@@ -80,9 +88,9 @@ def save_plot_single_timestep(timepoint, target_position, agent_position):
     fig, ax = plt.subplots()
     ax.add_artist(circle)
     #Add point for target
-    plt.scatter(math.cos(target_position), math.sin(target_position))
+    plt.scatter(np.cos(target_position), np.sin(target_position))
     #Add point for agent
-    plt.scatter(math.cos(agent_position), math.sin(agent_position))
+    plt.scatter(np.cos(agent_position), np.sin(agent_position))
     #Set axes
     plt.xlim([-1.1, 1.1])
     plt.ylim([-1.1, 1.1])
@@ -108,13 +116,14 @@ agent_surprisal = np.empty([n_timesteps])
 agent_positions[0] = init_agent_position
 
 target_variances[0] = np.random.gamma(gamma_params[0], gamma_params[1])
-target_positions[0] = np.random.normal(init_target_position, math.sqrt(target_variances[0])) 
+target_positions[0] = np.random.normal(init_target_position, np.sqrt(target_variances[0])) 
 
 observed_agent_positions[0] = np.random.normal(agent_positions[0], agent_position_observation_noise)
 inferred_agent_positions[0] = observed_agent_positions[0]
 
 observed_target_positions[0] = np.random.normal(target_positions[0], target_position_observation_noise)
 hgf_target_position.input(observed_target_positions[0])
+hgf_target_noise.input(observed_target_positions[0]**2)
 inferred_target_positions[0] = hgf_target_position.x1.mus[-1]
 
 agent_surprisal[0] = (inferred_agent_positions[0] - inferred_target_positions[0])**2
@@ -123,12 +132,12 @@ agent_surprisal[0] = (inferred_agent_positions[0] - inferred_target_positions[0]
 for timestep in range(1, n_timesteps):
 
     #The agent moves to it's the inferred position of the target at last timestep
-    agent_positions[timestep] = np.random.normal(inferred_target_positions[timestep-1], agent_movement_noise) #Change this to explicit active inference
+    agent_positions[timestep] = np.random.normal(inferred_target_positions[timestep-1], agent_movement_noise) #Change this to make explicit the active inference
 
     #Sample the variance of the target's random walk
     target_variances[timestep] = np.random.gamma(gamma_params[0], gamma_params[1])
     #Sample the position of the target
-    target_positions[timestep] = np.random.normal(target_positions[timestep-1], math.sqrt(target_variances[timestep]))
+    target_positions[timestep] = np.random.normal(target_positions[timestep-1], np.sqrt(target_variances[timestep]))
 
     #The agent observes (noisily) its own position
     observed_agent_positions[timestep] = np.random.normal(agent_positions[timestep], agent_position_observation_noise)
@@ -137,8 +146,10 @@ for timestep in range(1, n_timesteps):
     
     #The agent observes (noisily) the target's position
     observed_target_positions[timestep] = np.random.normal(target_positions[timestep], target_position_observation_noise)
-    #Input data to the hgf
+    #Input data to the hgf to infer position
     hgf_target_position.input(observed_target_positions[timestep])
+    #Input squared data to the hgf to infer noise
+    hgf_target_noise.input(observed_target_positions[0]**2)
     #Extract the inferred position of the target from the hgf
     inferred_target_positions[timestep] = hgf_target_position.x1.mus[-1]
 
