@@ -1,7 +1,7 @@
 Tore-hgf-julia/*
 *.DS_Store
 .vscode
-
+others/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

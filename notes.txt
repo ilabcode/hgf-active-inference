@@ -13,6 +13,9 @@
 
 
 
+#Gaussian expectation about my position being close to the targets position
+#learning rate = 1/(lambda+1)
+
 
 
 
