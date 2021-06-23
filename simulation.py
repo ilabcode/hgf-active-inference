@@ -1,9 +1,10 @@
 #Questions:
 # Is surprise only scored relative to the goal prior ? 
-#   Ie is there no epistemic component ?
+#   Ie is there no epistemic component ? - REMARK ON THIS
+# Same with expected surprise
+#   Compared to the MDP version
 # Should the agent move with a softmax or to the lowest epxected surprise ?
 # Would it be nice to compare epxlicitly to MDP's ?
-# The predictive posterior is over observations, not over inferred positions (mu1). How should surprise be?
 # Goal prior:
 #   On one hand: range of places to move (x_coordinates);
 #   on other hand: range of places where the target might be;
@@ -22,10 +23,11 @@
 # Make the agent able to affect the hidden states (maybe the target's drift?)
 # Learn hgf parameters (training period or online)
 # Select prior preferences through evolution
+# Making the target an agent that tries to run away
 
 #Others:
 # Make a way of running the ghgf forward
-#nInstead of drawing volatility from gamma, draw from gaussian with variance = np.exp(kappa2*x2+omega2)
+# Instead of drawing volatility from gamma, draw from gaussian with variance = np.exp(kappa2*x2+omega2)
 
 
 
@@ -33,7 +35,6 @@
 #-- Setup --#
 #############
 
-from operator import xor
 import sys
 sys.path.append('ghgf')
 import hgf
@@ -55,7 +56,7 @@ from scipy.signal import convolve
 
 #-- Plotting --#
 #Set whether to generate a gif
-make_gif = False
+make_gif = True
 #Speed of the gif
 gif_frame_duration = 0.3
 
@@ -78,9 +79,6 @@ init_agent_position = 0
 #Noise when the agent observes the target's and its own position (root of the exponentiated omega_input in the hgf)
 target_position_observation_noise = np.sqrt(np.exp(-1))
 agent_position_observation_noise = 0
-
-#DEPRECATED
-action_learning_rate = 1
 
 #Parameters for the hgf
 hgf_input_noise = -1
@@ -205,7 +203,7 @@ for timestep in range(n_timesteps):
         #Convolve the goal prior and the predictive posterior to get expected probability for each potential place to move
         expected_surprisal, x_coord = get_expected_surprisal(predictive_posteriors[timestep-1], goal_prior)
         #The agent moves deterministically to the place with the lowest expected surprisal
-        agent_positions[timestep] = x_coord[ np.argmin(expected_surprisal) ]
+        agent_positions[timestep] = x_coord[ np.argmin(expected_surprisal) ] #sample action from expected surprisal
 
         #Sample the variance of the target's random walk
         target_variances[timestep] = volatility_parent.rvs(1)
@@ -262,11 +260,6 @@ pd.Series(np.exp(hgf_target_position.x2.mus)).plot()
 pd.Series(target_positions).plot()
 pd.Series(inferred_target_positions).plot()
 pd.Series(observed_target_positions).plot()
-
-#position versus inferred versus observed agent position
-pd.Series(agent_positions).plot()
-pd.Series(inferred_agent_positions).plot()
-pd.Series(observed_agent_positions).plot()
 
 #inferred own versus target positions with surprisal
 pd.Series(inferred_target_positions).plot()
