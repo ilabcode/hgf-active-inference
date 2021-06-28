@@ -14,6 +14,7 @@
 #   Should we make it into a proper 2D distribution?
 
 #Extensions:
+# Add softmax or sampling to the decision
 # Plot predictive distribution on circle
 # Add a parent to the volatility (or just blocks with varying volatility)
 # Add preferences for movement length
@@ -24,11 +25,14 @@
 # Learn hgf parameters (training period or online)
 # Select prior preferences through evolution
 # Making the target an agent that tries to run away
+# Exploring parameter space
+#    Noise
+#    Drift
+#    Goal priors
 
-#Others:
-# Make a way of running the ghgf forward
-# Instead of drawing volatility from gamma, draw from gaussian with variance = np.exp(kappa2*x2+omega2)
 
+#To Do:
+### Be explicit: predictive posterior for all observation modalities given control state
 
 
 #############
@@ -56,7 +60,7 @@ from scipy.signal import convolve
 
 #-- Plotting --#
 #Set whether to generate a gif
-make_gif = True
+make_gif = False
 #Speed of the gif
 gif_frame_duration = 0.3
 
@@ -66,7 +70,7 @@ n_timesteps = 200
 
 #-- Environment --#
 #The distribution which the target volatility is sampled from
-volatility_parent = gamma(a = 2, scale = 0.05)
+volatility_parent = gamma(a = 2, scale = 0.05) 
 #The drift of the target (corresponding to rho1 in the hgf)
 target_position_drift = 0.5
 #The initial position of agent and target (correpsonding to initial_mu1 in the hgf)
@@ -75,7 +79,6 @@ init_agent_position = 0
 
 
 #-- Agent --#
-
 #Noise when the agent observes the target's and its own position (root of the exponentiated omega_input in the hgf)
 target_position_observation_noise = np.sqrt(np.exp(-1))
 agent_position_observation_noise = 0
@@ -95,9 +98,14 @@ hgf_target_position = hgf.StandardHGF(  initial_mu1=0,
                                         rho1 = 0.5,
                                         rho2 = 0)
 
-#The agent's goal prior about inferred distance to target
+
+#The agent's goal prior about distance to target
 gp_mean, gp_standard_deviation = [0, #mean
                                   1] #standard deviation
+
+#Sets whether the goal prior is over inferred positions or observations
+preference_modality = 'observation'
+#preference_modality = 'position'
 
 #################
 #-- Functions --#
@@ -173,6 +181,7 @@ def get_expected_surprisal(predictive_posterior, goal_prior):
 
 #-- Setup --#
 #Make empty arrays for population
+agent_actions = np.empty([n_timesteps])
 agent_positions = np.empty([n_timesteps])
 observed_agent_positions = np.empty([n_timesteps])
 inferred_agent_positions = np.empty([n_timesteps])
@@ -187,7 +196,6 @@ agent_surprisal = np.empty([n_timesteps])
 #For each timestep
 for timestep in range(n_timesteps):
     
-    #-- Movement step --#
     #On the first timestep
     if timestep == 0:
         #Set agent to its initial position
@@ -197,19 +205,22 @@ for timestep in range(n_timesteps):
     
     #On other timesteps
     else:
-
+        #-- Action step --#
         #Define the goal prior relative to the expectation of the predictive posterior
         goal_prior = norm(gp_mean + predictive_posteriors[timestep-1].stats('m'), gp_standard_deviation)
         #Convolve the goal prior and the predictive posterior to get expected probability for each potential place to move
         expected_surprisal, x_coord = get_expected_surprisal(predictive_posteriors[timestep-1], goal_prior)
         #The agent moves deterministically to the place with the lowest expected surprisal
-        agent_positions[timestep] = x_coord[ np.argmin(expected_surprisal) ] #sample action from expected surprisal
+        agent_actions[timestep] = x_coord[ np.argmin(expected_surprisal) ] #sample action from expected surprisal
 
+        #-- Environment step --#
         #Sample the variance of the target's random walk
         target_variances[timestep] = volatility_parent.rvs(1)
         #Sample the position of the target from a normal distribution with a drift on the mean
         target_positions[timestep] = np.random.normal(target_positions[timestep-1] + target_position_drift, np.sqrt(target_variances[timestep]))
-
+        
+        #The agent's posoition is fully determined by its action
+        agent_positions[timestep] = agent_actions[timestep] #Change this to make movements non-determinstic
 
     #-- Inference step --#
     #The agent observes (possibly noisily) its own position
@@ -224,10 +235,14 @@ for timestep in range(n_timesteps):
     #Extract the inferred position of the target from the hgf
     inferred_target_positions[timestep] = hgf_target_position.x1.mus[-1]
 
-    #Get the inferred distance to the target
-    inferred_distance = inferred_agent_positions[timestep] - inferred_target_positions[timestep]
+    #Get the distance to the target in the modality that the goal prior is over
+    if preference_modality == 'position':
+        distance_target_agent = inferred_agent_positions[timestep] - inferred_target_positions[timestep]
+    elif preference_modality == 'observation':
+        distance_target_agent = observed_agent_positions[timestep] - observed_target_positions[timestep]
+    
     #Get the surprisal relative to the goal prior
-    agent_surprisal[timestep] = - np.log( norm(gp_mean, gp_standard_deviation).pdf(inferred_distance))
+    agent_surprisal[timestep] = - np.log( norm(gp_mean, gp_standard_deviation).pdf(distance_target_agent))
 
 
     #-- Prediction step --#
@@ -264,6 +279,11 @@ pd.Series(observed_target_positions).plot()
 #inferred own versus target positions with surprisal
 pd.Series(inferred_target_positions).plot()
 pd.Series(inferred_agent_positions).plot()
+pd.Series(agent_surprisal).plot()
+
+#inferred own versus target positions with surprisal
+pd.Series(observed_target_positions).plot()
+pd.Series(observed_agent_positions).plot()
 pd.Series(agent_surprisal).plot()
 
 

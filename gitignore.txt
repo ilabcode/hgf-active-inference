@@ -2,3 +2,4 @@
 Tore-hgf-julia
 *.gif
 gifpics/*
+chasing_target.gif
