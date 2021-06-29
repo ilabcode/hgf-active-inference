@@ -14,6 +14,7 @@
 #   Should we make it into a proper 2D distribution?
 
 #Extensions:
+# Think further ahead (time horizon)
 # Add softmax or sampling to the decision
 # Plot predictive distribution on circle
 # Add a parent to the volatility (or just blocks with varying volatility)
@@ -29,7 +30,6 @@
 #    Noise
 #    Drift
 #    Goal priors
-
 
 #To Do:
 ### Be explicit: predictive posterior for all observation modalities given control state
@@ -64,6 +64,14 @@ make_gif = False
 #Speed of the gif
 gif_frame_duration = 0.3
 
+#Predictive posterior plotted confidence intervals
+pp_ci_lower = 0.05
+pp_ci_upper = 0.95
+
+#Probability interval for the agent's action
+action_probability_interval_lower = 0.1
+action_probability_interval_upper = 0.9
+
 #-- Simulation --#
 #number of timesteps
 n_timesteps = 200
@@ -80,11 +88,11 @@ init_agent_position = 0
 
 #-- Agent --#
 #Noise when the agent observes the target's and its own position (root of the exponentiated omega_input in the hgf)
-target_position_observation_noise = np.sqrt(np.exp(-1))
+target_position_observation_noise = np.sqrt(np.exp(3))
 agent_position_observation_noise = 0
 
 #Parameters for the hgf
-hgf_input_noise = -1
+hgf_input_noise = 3
 hgf_input_precision = np.exp(-hgf_input_noise)
 
 hgf_target_position = hgf.StandardHGF(  initial_mu1=0,
@@ -110,6 +118,18 @@ preference_modality = 'observation'
 #################
 #-- Functions --#
 #################
+
+#-- Helper function for plotting action probabilities --#
+def plot_action_prob_interval_upper(predictive_posterior):
+    
+    convolved_probabilities, possible_actions = get_expected_surprisal(predictive_posterior, gp_mean, gp_standard_deviation)
+
+    mean = possible_actions[ np.argmax(convolved_probabilities) ]
+    lower = possible_actions[ np.cumsum( np.log( convolved_probabilities)  ) / sum( np.log( convolved_probabilities) ) > action_probability_interval_lower][0]
+    upper = possible_actions[ np.cumsum( np.log( convolved_probabilities)  ) / sum( np.log( convolved_probabilities) ) > action_probability_interval_upper][0]
+
+    return {'mean':mean, 'lower':lower, 'upper':upper}
+
 
 #-- plotting function for the GIF --#
 def save_plot_single_timestep(  timepoint,
@@ -151,27 +171,27 @@ def save_plot_single_timestep(  timepoint,
 
 
 #Convolution function
-def get_expected_surprisal(predictive_posterior, goal_prior):
+def get_expected_surprisal(predictive_posterior, gp_mean, gp_standard_deviation):
+    
+    #Define the goal prior relative to the expectation of the predictive posterior
+    goal_prior_absolute = norm(gp_mean + predictive_posterior.stats('m'), gp_standard_deviation)
     
     #Get discretized coordinates that cover both distributions
-    x_coord = np.linspace(
-        min(predictive_posterior.ppf(0.001), goal_prior.ppf(0.001)),
-        max(predictive_posterior.ppf(0.999), goal_prior.ppf(0.999)),
+    possible_actions = np.linspace(
+        min(predictive_posterior.ppf(0.001), goal_prior_absolute.ppf(0.001)),
+        max(predictive_posterior.ppf(0.999), goal_prior_absolute.ppf(0.999)),
         10000
         ) #change this when we have finite state space (i.e. agent moves on a circle) to cover the whole state space
     
     #Get probability densities for each x coordinate
-    dens1 = predictive_posterior.pdf(x_coord)
-    dens2 = goal_prior.pdf(x_coord)
+    predictive_posterior_discrete = predictive_posterior.pdf(possible_actions)
+    goal_prior_absolute_discrete = goal_prior_absolute.pdf(possible_actions)
 
     #Convolve the two functions
-    convolved_probabilities = convolve(dens1, dens2, mode='same') / sum(dens2)
-
-    #Transform probabilities to surprisal
-    expected_surprisal = -np.log(convolved_probabilities)
+    convolved_probabilities = convolve(predictive_posterior_discrete, goal_prior_absolute_discrete, mode='same') / sum(goal_prior_absolute_discrete)
 
     #Return x coordinates and convolved probability densities
-    return expected_surprisal, x_coord
+    return convolved_probabilities, possible_actions
 
 
 
@@ -181,17 +201,16 @@ def get_expected_surprisal(predictive_posterior, goal_prior):
 
 #-- Setup --#
 #Make empty arrays for population
-agent_actions = np.empty([n_timesteps])
-agent_positions = np.empty([n_timesteps])
-observed_agent_positions = np.empty([n_timesteps])
-inferred_agent_positions = np.empty([n_timesteps])
-target_variances = np.empty([n_timesteps])
-target_positions = np.empty([n_timesteps])
-observed_target_positions = np.empty([n_timesteps])
-inferred_target_positions = np.empty([n_timesteps])
+agent_actions = np.empty([n_timesteps]) * np.nan
+agent_positions = np.empty([n_timesteps]) * np.nan
+observed_agent_positions = np.empty([n_timesteps]) * np.nan
+inferred_agent_positions = np.empty([n_timesteps]) * np.nan
+target_variances = np.empty([n_timesteps]) * np.nan
+target_positions = np.empty([n_timesteps]) * np.nan
+observed_target_positions = np.empty([n_timesteps]) * np.nan
+inferred_target_positions = np.empty([n_timesteps]) * np.nan
+agent_surprisal = np.empty([n_timesteps]) * np.nan
 predictive_posteriors = [None] * n_timesteps
-agent_surprisal = np.empty([n_timesteps])
-
 
 #For each timestep
 for timestep in range(n_timesteps):
@@ -206,12 +225,10 @@ for timestep in range(n_timesteps):
     #On other timesteps
     else:
         #-- Action step --#
-        #Define the goal prior relative to the expectation of the predictive posterior
-        goal_prior = norm(gp_mean + predictive_posteriors[timestep-1].stats('m'), gp_standard_deviation)
         #Convolve the goal prior and the predictive posterior to get expected probability for each potential place to move
-        expected_surprisal, x_coord = get_expected_surprisal(predictive_posteriors[timestep-1], goal_prior)
+        convolved_probabilities, possible_actions = get_expected_surprisal(predictive_posteriors[timestep-1], gp_mean, gp_standard_deviation)
         #The agent moves deterministically to the place with the lowest expected surprisal
-        agent_actions[timestep] = x_coord[ np.argmin(expected_surprisal) ] #sample action from expected surprisal
+        agent_actions[timestep] = possible_actions[ np.argmin( -np.log( convolved_probabilities ) ) ] #Change this to sample action from expected surprisal (or make softmax)
 
         #-- Environment step --#
         #Sample the variance of the target's random walk
@@ -261,30 +278,130 @@ for timestep in range(n_timesteps):
 
 
 
-
 ################
 #-- Plotting --#
 ################
+#Combine into dataframe for easy plotting
+plotting_df =   pd.DataFrame(list(zip(
+                    agent_actions,
+                    [plot_action_prob_interval_upper(x)['mean'] for x in predictive_posteriors],
+                    [plot_action_prob_interval_upper(x)['lower'] for x in predictive_posteriors],
+                    [plot_action_prob_interval_upper(x)['upper'] for x in predictive_posteriors],
+                    agent_positions,
+                    inferred_agent_positions,
+                    observed_agent_positions,
+                    target_positions,
+                    inferred_target_positions,
+                    [1/x for x in hgf_target_position.x1.pis],
+                    observed_target_positions,
+                    [float(pp.stats('m')) for pp in predictive_posteriors],
+                    [pp.ppf(pp_ci_lower) for pp in predictive_posteriors],
+                    [pp.ppf(pp_ci_upper) for pp in predictive_posteriors],   
+                    agent_surprisal
+                )), 
+                columns=[  
+                    'agent_actions',
+                    'agent_action_mean',
+                    'agent_action_lower',
+                    'agent_action_upper',
+                    'agent_positions',
+                    'inferred_agent_positions',
+                    'observed_agent_positions',
+                    'target_positions',
+                    'inferred_target_positions',
+                    'uncertainty_target_positions', 
+                    'observed_target_positions',
+                    'pp_mean',
+                    'pp_ci_lower',
+                    'pp_ci_upper',
+                    'agent_surprisal'
+                ])
 
-#-- Simple plots --#
-#variance versus inferred variance [This might be wrong]
-pd.Series(target_variances).plot()
-pd.Series(np.exp(hgf_target_position.x2.mus)).plot()
+#Shift all the predictive measures to the next timestep
+for predictive_measure in ['pp_mean', 'pp_ci_lower', 'pp_ci_upper', 'agent_action_mean', 'agent_action_lower', 'agent_action_upper']:
+    plotting_df[predictive_measure] = np.roll(plotting_df[predictive_measure], shift=1)
+    plotting_df[predictive_measure][0] = np.nan
 
-#position versus inferred versus observed target position
-pd.Series(target_positions).plot()
-pd.Series(inferred_target_positions).plot()
-pd.Series(observed_target_positions).plot()
 
-#inferred own versus target positions with surprisal
-pd.Series(inferred_target_positions).plot()
-pd.Series(inferred_agent_positions).plot()
-pd.Series(agent_surprisal).plot()
+#-- HGF inference of position --#
+plt.figure(figsize=(12,5))
+plt.title('HGF inference on target position')
+plt.ylabel('Position')
+plt.xlabel('Timestep')
 
-#inferred own versus target positions with surprisal
-pd.Series(observed_target_positions).plot()
-pd.Series(observed_agent_positions).plot()
-pd.Series(agent_surprisal).plot()
+ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
+ax1 = plotting_df.target_positions.plot(color='darkblue', grid=True, label='Actual Position')
+ax1 = plotting_df.inferred_target_positions.plot(color='teal', grid=True, label='Inferred Position')
+
+plt.fill_between(   plotting_df.observed_target_positions.index,
+                    plotting_df.inferred_target_positions - plotting_df.uncertainty_target_positions,
+                    plotting_df.inferred_target_positions + plotting_df.uncertainty_target_positions,
+                    color = 'teal', alpha = .2)
+
+h1, l1 = ax1.get_legend_handles_labels()
+plt.legend(l1+['Inference uncertainty'], loc=2)
+plt.show()
+
+
+
+#-- Predictive posterior --#
+plt.figure(figsize=(12,5))
+plt.title('Predictive posterior over observations of target')
+plt.ylabel('Position')
+plt.xlabel('Timestep')
+
+ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
+ax1 = plotting_df.pp_mean.plot(color='teal', grid=True, label='Predictive Posterior Mean')
+
+plt.fill_between(   plotting_df.observed_target_positions.index,
+                    plotting_df.pp_ci_lower,
+                    plotting_df.pp_ci_upper,
+                    color = 'teal', alpha = .2)
+
+h1, l1 = ax1.get_legend_handles_labels()
+plt.legend(l1+['{}% Confidence Intervals'.format(
+                round((pp_ci_upper-pp_ci_lower)*100)
+                )], loc=2)
+plt.show()
+
+
+
+#-- Agent actions --#
+plt.figure(figsize=(12,5))
+plt.title('Agent actions')
+plt.ylabel('Position')
+plt.xlabel('Timestep')
+
+ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Target Position')
+ax1 = plotting_df.agent_action_mean.plot(color='teal', grid=True, label='Highest Probability Action')
+ax1 = plotting_df.agent_actions.plot(color='teal', grid=True, label='Actual Action')
+
+plt.fill_between(   plotting_df.observed_target_positions.index,
+                    plotting_df.agent_action_lower,
+                    plotting_df.agent_action_upper,
+                    color = 'teal', alpha = .2)
+
+h1, l1 = ax1.get_legend_handles_labels()
+
+plt.legend(l1 + ['Action {}% probability interval'.format(
+                round((action_probability_interval_upper-action_probability_interval_lower)*100)
+                )], loc=2)
+plt.show()
+
+
+
+#-- Goal Prior surprisal --#
+plt.figure(figsize=(12,5))
+plt.title('Goal prior surprisal')
+plt.ylabel('Position')
+plt.xlabel('Timestep')
+
+ax1 = plotting_df.agent_surprisal.plot(color='pink', grid=True, label='Agent Surprisal')
+ax1 = plotting_df.agent_surprisal.rolling(5).mean().plot(color='darkred', grid=True, label='Moving Average')
+
+h1, l1 = ax1.get_legend_handles_labels()
+plt.legend(l1, loc=2)
+plt.show()
 
 
 
@@ -306,17 +423,12 @@ if make_gif:
                                     agent_surprisal[timestep],
                                     predictive_posteriors[timestep])
 
-
     #Build together into a GIF
     with imageio.get_writer('chasing_target.gif', mode='I', duration = gif_frame_duration) as writer:
         for filename in plots_filenames:
             image = imageio.imread('gifpics/' + filename + '.png')
             writer.append_data(image)
             os.remove('gifpics/' + filename + '.png')
-
-
-
-
 
 
 
