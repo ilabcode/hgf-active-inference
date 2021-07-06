@@ -46,12 +46,18 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import imageio
+from math import ceil
 from scipy.stats import t as students_t
-from scipy.stats import gamma
 from scipy.stats import norm
 from scipy.signal import convolve
 
+#observed position: as points
+#Size up a bit
 
+#Three plots in total
+#Remove generating mean from circle plot
+#Have gif on the line plot with moving dots
+#Green is observed target position, blue is observed agent position
 
 ################
 #-- Settings --#
@@ -61,15 +67,17 @@ from scipy.signal import convolve
 #Set whether to generate a gif
 make_gif = False
 #Speed of the gif
-gif_frame_duration = 0.3
+gif_frame_duration = 0.6
+#Scaling parameter for plotting 
+circle_scale = 10
 
 #Predictive posterior plotted confidence intervals
-pp_ci_lower = 0.05
-pp_ci_upper = 0.95
+pp_ci_lower = 0.16
+pp_ci_upper = 0.84
 
 #Probability interval for the agent's action
-action_probability_interval_lower = 0.1
-action_probability_interval_upper = 0.9
+action_probability_interval_lower = 0.45
+action_probability_interval_upper = 0.55
 
 #-- Simulation --#
 #number of timesteps
@@ -77,21 +85,20 @@ n_timesteps = 200
 
 #-- Environment --#
 #The distribution which the target volatility is sampled from
-volatility_parent = gamma(a = 2, scale = 0.05) 
+volatility_vector = [10,120,10,120,10]
 #The drift of the target (corresponding to rho1 in the hgf)
 target_position_drift = 0.5
 #The initial position of agent and target (correpsonding to initial_mu1 in the hgf)
 init_target_position = 0
 init_agent_position = 0
 
-
 #-- Agent --#
 #Noise when the agent observes the target's and its own position (root of the exponentiated omega_input in the hgf)
-target_position_observation_noise = np.sqrt(np.exp(3))
+target_position_observation_noise = np.sqrt(np.exp(4))
 agent_position_observation_noise = 0
 
 #Parameters for the hgf
-hgf_input_noise = 3
+hgf_input_noise = 4
 hgf_input_precision = np.exp(-hgf_input_noise)
 
 hgf_target_position = hgf.StandardHGF(  initial_mu1=0,
@@ -108,7 +115,7 @@ hgf_target_position = hgf.StandardHGF(  initial_mu1=0,
 
 #The agent's goal prior about distance to target
 gp_mean, gp_standard_deviation = [0, #mean
-                                  1] #standard deviation
+                                  5] #standard deviation
 
 #Sets whether the goal prior is over inferred positions or observations
 preference_modality = 'observation'
@@ -135,12 +142,13 @@ def save_plot_single_timestep(  timepoint,
                                 agent_position,
                                 observed_agent_position,
                                 inferred_agent_position,
-                                target_variance,
+                                target_volatilities,
                                 target_position,
                                 observed_target_position,
                                 inferred_target_position,
                                 agent_surprisal,
-                                predictive_posterior):
+                                predictive_posterior,
+                                circle_scale):
 
     #Make filename and append it to the list
     filename = 'p{}'.format(timepoint)
@@ -151,14 +159,11 @@ def save_plot_single_timestep(  timepoint,
     #Make plot with circle
     fig, ax = plt.subplots()
     ax.add_artist(circle)
-    #Add point for target position
-    plt.scatter(np.cos(target_position), np.sin(target_position),
-                c='green', marker = 'X')
     #Add point for observed target position
-    plt.scatter(np.cos(observed_target_position), np.sin(observed_target_position),
-                c='lightgreen', marker = 'X', alpha=0.4)
-    #Add point for agent position
-    plt.scatter(np.cos(agent_position), np.sin(agent_position),
+    plt.scatter(np.cos(observed_target_position/circle_scale), np.sin(observed_target_position/circle_scale),
+                c='green', marker = 'X')
+    #Add point for observed agent position
+    plt.scatter(np.cos(observed_agent_position/circle_scale), np.sin(observed_agent_position/circle_scale),
                 c='blue')
     #Set axes
     plt.xlim([-1.1, 1.1])
@@ -204,12 +209,14 @@ agent_actions = np.empty([n_timesteps]) * np.nan
 agent_positions = np.empty([n_timesteps]) * np.nan
 observed_agent_positions = np.empty([n_timesteps]) * np.nan
 inferred_agent_positions = np.empty([n_timesteps]) * np.nan
-target_variances = np.empty([n_timesteps]) * np.nan
+target_volatilities = np.empty([n_timesteps]) * np.nan
 target_positions = np.empty([n_timesteps]) * np.nan
 observed_target_positions = np.empty([n_timesteps]) * np.nan
 inferred_target_positions = np.empty([n_timesteps]) * np.nan
 agent_surprisal = np.empty([n_timesteps]) * np.nan
 predictive_posteriors = [None] * n_timesteps
+
+current_volatility = volatility_vector[0]
 
 #For each timestep
 for timestep in range(n_timesteps):
@@ -230,14 +237,21 @@ for timestep in range(n_timesteps):
         agent_actions[timestep] = possible_actions[ np.argmin( -np.log( convolved_probabilities ) ) ] #Change this to sample action from expected surprisal (or make softmax)
 
         #-- Environment step --#
-        #Sample the variance of the target's random walk
-        target_variances[timestep] = volatility_parent.rvs(1)
-        #Sample the position of the target from a normal distribution with a drift on the mean
-        target_positions[timestep] = np.random.normal(target_positions[timestep-1] + target_position_drift, np.sqrt(target_variances[timestep]))
-        
         #The agent's posoition is fully determined by its action
         agent_positions[timestep] = agent_actions[timestep] #Change this to make movements non-determinstic
 
+        #This if at evenly spaced times throughout the timeseries
+        if n_timesteps % round(n_timesteps / len(volatility_vector)) == 0:
+            #So that the volatility goes through the volatility_vector
+            current_volatility = volatility_vector[ ceil( timestep/round( n_timesteps / len(volatility_vector) ) ) -1 ]
+        
+        #Save volatility trial-by-trial
+        target_volatilities[timestep] = current_volatility
+
+        #Sample the position of the target from a normal distribution with a drift on the mean
+        target_positions[timestep] = np.random.normal(target_positions[timestep-1] + target_position_drift, np.sqrt(target_volatilities[timestep]))
+        
+        
     #-- Inference step --#
     #The agent observes (possibly noisily) its own position
     observed_agent_positions[timestep] = np.random.normal(agent_positions[timestep], agent_position_observation_noise)
@@ -289,6 +303,9 @@ plotting_df =   pd.DataFrame(list(zip(
                     agent_positions,
                     inferred_agent_positions,
                     observed_agent_positions,
+                    target_volatilities,
+                    [np.exp(x) for x in hgf_target_position.x2.mus],
+                    [np.exp(1/x) for x in hgf_target_position.x2.pis],
                     target_positions,
                     inferred_target_positions,
                     [1/x for x in hgf_target_position.x1.pis],
@@ -306,6 +323,9 @@ plotting_df =   pd.DataFrame(list(zip(
                     'agent_positions',
                     'inferred_agent_positions',
                     'observed_agent_positions',
+                    'target_volatilities',
+                    'inferred_target_volatilities',
+                    'uncertainty_target_volatilities',
                     'target_positions',
                     'inferred_target_positions',
                     'uncertainty_target_positions', 
@@ -321,21 +341,50 @@ for predictive_measure in ['pp_mean', 'pp_ci_lower', 'pp_ci_upper', 'agent_actio
     plotting_df[predictive_measure] = np.roll(plotting_df[predictive_measure], shift=1)
     plotting_df[predictive_measure][0] = np.nan
 
+#Add timestep column
+plotting_df['timestep'] = plotting_df.index + 1
+
+
 
 #-- HGF inference of position --#
 plt.figure(figsize=(12,5))
-plt.title('HGF inference on target position')
+plt.title('Prediction and following of target position')
 plt.ylabel('Position')
 plt.xlabel('Timestep')
 
-ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
-ax1 = plotting_df.target_positions.plot(color='darkblue', grid=True, label='Actual Position')
-ax1 = plotting_df.inferred_target_positions.plot(color='teal', grid=True, label='Inferred Position')
+ax1 = plotting_df.observed_agent_positions.plot(color='blue', grid=True, label = 'Observed Agent Position', zorder = 1)
+plt.scatter(color = 'green', s = 4, x = plotting_df.timestep, y = plotting_df.observed_target_positions, label = 'Observed Target Position', zorder = 20)
 
-plt.fill_between(   plotting_df.observed_target_positions.index,
+plt.fill_between(   plotting_df.timestep,
                     plotting_df.inferred_target_positions - plotting_df.uncertainty_target_positions,
                     plotting_df.inferred_target_positions + plotting_df.uncertainty_target_positions,
                     color = 'teal', alpha = .2)
+
+plt.fill_between(   plotting_df.timestep,
+                    plotting_df.pp_ci_lower,
+                    plotting_df.pp_ci_upper,
+                    color = 'lightgreen', alpha = .2)
+
+h1, l1 = ax1.get_legend_handles_labels()
+plt.legend(l1+['Inference uncertainty'] + ['Predictive uncertainty'], loc=2)
+plt.show()
+
+
+
+
+#-- HGF inference of volatility --#
+plt.figure(figsize=(12,5))
+plt.title('HGF inference on target volatility')
+plt.ylabel('Volatility')
+plt.xlabel('Timestep')
+
+ax1 = plotting_df.target_volatilities.plot(color='indigo', grid=True, label='Actual volatility')
+ax1 = plotting_df.inferred_target_volatilities.plot(color='darkviolet', grid=True, label='Inferred volatility')
+
+plt.fill_between(   plotting_df.timestep,
+                    plotting_df.inferred_target_volatilities - plotting_df.uncertainty_target_volatilities,
+                    plotting_df.inferred_target_volatilities + plotting_df.uncertainty_target_volatilities,
+                    color = 'darkviolet', alpha = .2)
 
 h1, l1 = ax1.get_legend_handles_labels()
 plt.legend(l1+['Inference uncertainty'], loc=2)
@@ -343,56 +392,11 @@ plt.show()
 
 
 
-#-- Predictive posterior --#
-plt.figure(figsize=(12,5))
-plt.title('Predictive posterior over observations of target')
-plt.ylabel('Position')
-plt.xlabel('Timestep')
-
-ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
-ax1 = plotting_df.pp_mean.plot(color='teal', grid=True, label='Predictive Posterior Mean')
-
-plt.fill_between(   plotting_df.observed_target_positions.index,
-                    plotting_df.pp_ci_lower,
-                    plotting_df.pp_ci_upper,
-                    color = 'teal', alpha = .2)
-
-h1, l1 = ax1.get_legend_handles_labels()
-plt.legend(l1+['{}% Confidence Intervals'.format(
-                round((pp_ci_upper-pp_ci_lower)*100)
-                )], loc=2)
-plt.show()
-
-
-
-#-- Agent actions --#
-plt.figure(figsize=(12,5))
-plt.title('Agent actions')
-plt.ylabel('Position')
-plt.xlabel('Timestep')
-
-ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Target Position')
-ax1 = plotting_df.agent_action_mean.plot(color='teal', grid=True, label='Highest Probability Action')
-ax1 = plotting_df.agent_actions.plot(color='teal', grid=True, label='Actual Action')
-
-plt.fill_between(   plotting_df.observed_target_positions.index,
-                    plotting_df.agent_action_lower,
-                    plotting_df.agent_action_upper,
-                    color = 'teal', alpha = .2)
-
-h1, l1 = ax1.get_legend_handles_labels()
-
-plt.legend(l1 + ['Action {}% probability interval'.format(
-                round((action_probability_interval_upper-action_probability_interval_lower)*100)
-                )], loc=2)
-plt.show()
-
-
 
 #-- Goal Prior surprisal --#
 plt.figure(figsize=(12,5))
 plt.title('Goal prior surprisal')
-plt.ylabel('Position')
+plt.ylabel('Surprisal')
 plt.xlabel('Timestep')
 
 ax1 = plotting_df.agent_surprisal.plot(color='pink', grid=True, label='Agent Surprisal')
@@ -402,6 +406,73 @@ h1, l1 = ax1.get_legend_handles_labels()
 plt.legend(l1, loc=2)
 plt.show()
 
+
+
+
+# #-- HGF inference of position --#
+# plt.figure(figsize=(12,5))
+# plt.title('HGF inference on target position')
+# plt.ylabel('Position')
+# plt.xlabel('Timestep')
+
+# ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
+# ax1 = plotting_df.target_positions.plot(color='darkblue', grid=True, label='Actual Position')
+# ax1 = plotting_df.inferred_target_positions.plot(color='teal', grid=True, label='Inferred Position')
+
+# plt.fill_between(   plotting_df.observed_target_positions.index,
+#                     plotting_df.inferred_target_positions - plotting_df.uncertainty_target_positions,
+#                     plotting_df.inferred_target_positions + plotting_df.uncertainty_target_positions,
+#                     color = 'teal', alpha = .2)
+
+# h1, l1 = ax1.get_legend_handles_labels()
+# plt.legend(l1+['Inference uncertainty'], loc=2)
+# plt.show()
+
+
+# #-- Predictive posterior --#
+# plt.figure(figsize=(12,5))
+# plt.title('Predictive posterior over observations of target')
+# plt.ylabel('Position')
+# plt.xlabel('Timestep')
+
+# ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
+# ax1 = plotting_df.pp_mean.plot(color='teal', grid=True, label='Predictive Posterior Mean')
+
+# plt.fill_between(   plotting_df.observed_target_positions.index,
+#                     plotting_df.pp_ci_lower,
+#                     plotting_df.pp_ci_upper,
+#                     color = 'teal', alpha = .2)
+
+# h1, l1 = ax1.get_legend_handles_labels()
+# plt.legend(l1+['{}% Confidence Intervals'.format(
+#                 round((pp_ci_upper-pp_ci_lower)*100)
+#                 )], loc=2)
+# plt.show()
+
+
+# #-- Agent actions --#
+# plt.figure(figsize=(12,5))
+# plt.title('Agent actions')
+# plt.ylabel('Position')
+# plt.xlabel('Timestep')
+
+# ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Target Position')
+# ax1 = plotting_df.agent_action_mean.plot(color='teal', grid=True, label='Highest Probability Action')
+# ax1 = plotting_df.agent_actions.plot(color='teal', grid=True, label='Agent Action')
+
+# plt.fill_between(   plotting_df.observed_target_positions.index,
+#                     plotting_df.agent_action_lower,
+#                     plotting_df.agent_action_upper,
+#                     color = 'teal', alpha = .2)
+
+# h1, l1 = ax1.get_legend_handles_labels()
+
+# plt.legend(l1 
+# + ['Action {}% probability interval'.format(
+#                 round((action_probability_interval_upper-action_probability_interval_lower)*100)
+#                 )]
+#                 , loc=2)
+# plt.show()
 
 
 #-- GIF --#
@@ -415,12 +486,13 @@ if make_gif:
                                     agent_positions[timestep],
                                     observed_agent_positions[timestep],
                                     inferred_agent_positions[timestep],
-                                    target_variances[timestep],
+                                    target_volatilities[timestep],
                                     target_positions[timestep],
                                     observed_target_positions[timestep],
                                     inferred_target_positions[timestep],
                                     agent_surprisal[timestep],
-                                    predictive_posteriors[timestep])
+                                    predictive_posteriors[timestep],
+                                    circle_scale)
 
     #Build together into a GIF
     with imageio.get_writer('chasing_target.gif', mode='I', duration = gif_frame_duration) as writer:
@@ -483,4 +555,4 @@ if False:
 
 
     #Find the place with the lowest expected surprise
-    x_coord[np.argmin(-np.log(expected_probability))]
+    x_coord[np.argmin(-np.log(expected_probability))] 
