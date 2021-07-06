@@ -889,15 +889,15 @@ class Parameter(object):
 
     @space.setter
     def space(self, space):
-        if space is 'native':
+        if space == 'native':
             self._space = space
             self._lower_bound = None
             self._upper_bound = None
-        elif space is 'log':
+        elif space == 'log':
             self._space = space
             self._lower_bound = 0
             self._upper_bound = None
-        elif space is 'logit':
+        elif space == 'logit':
             self._space = space
             self._lower_bound = 0
             self._upper_bound = 1
@@ -923,13 +923,13 @@ class Parameter(object):
     @lower_bound.setter
     def lower_bound(self, lower_bound):
         space = self.space
-        if lower_bound is not None and space is 'native':
+        if lower_bound is not None and space == 'native':
             raise ParameterConfigurationError(
-                "lower_bound must be None if space is 'native'.")
+                "lower_bound must be None if space == 'native'.")
         elif lower_bound is not None and lower_bound > self.value:
             raise ParameterConfigurationError(
                 'lower_bound may not be greater than current value')
-        elif space is 'log':
+        elif space == 'log':
             self._lower_bound = lower_bound
             self._upper_bound = None
         else:
@@ -953,13 +953,13 @@ class Parameter(object):
     @upper_bound.setter
     def upper_bound(self, upper_bound):
         space = self.space
-        if upper_bound is not None and space is 'native':
+        if upper_bound is not None and space == 'native':
             raise ParameterConfigurationError(
-                "upper_bound must be None if space is 'native'.")
+                "upper_bound must be None if space == 'native'.")
         elif upper_bound is not None and upper_bound < self.value:
             raise ParameterConfigurationError(
                 'upper_bound may not be less than current value')
-        elif space is 'log':
+        elif space == 'log':
             self._lower_bound = None
             self._upper_bound = upper_bound
         else:
@@ -992,13 +992,13 @@ class Parameter(object):
             self._value = value
 
         space = self.space
-        if space is 'native':
+        if space == 'native':
             self._trans_value = value
-        elif space is 'log':
+        elif space == 'log':
             self._trans_value = log(value,
                                     lower_bound=self.lower_bound,
                                     upper_bound=self.upper_bound)
-        elif space is 'logit':
+        elif space == 'logit':
             self._trans_value = logit(value,
                                       lower_bound=self.lower_bound,
                                       upper_bound=self.upper_bound)
@@ -1012,13 +1012,13 @@ class Parameter(object):
         self._trans_value = trans_value
 
         space = self.space
-        if space is 'native':
+        if space == 'native':
             self._value = trans_value
-        elif space is 'log':
+        elif space == 'log':
             self._value = exp(trans_value,
                               lower_bound=self.lower_bound,
                               upper_bound=self.upper_bound)
-        elif space is 'logit':
+        elif space == 'logit':
             self._value = sgm(trans_value,
                               lower_bound=self.lower_bound,
                               upper_bound=self.upper_bound)
@@ -1033,13 +1033,13 @@ class Parameter(object):
 
         if prior_mean is not None:
             space = self.space
-            if space is 'native':
+            if space == 'native':
                 self._trans_prior_mean = prior_mean
-            elif space is 'log':
+            elif space == 'log':
                 self._trans_prior_mean = log(prior_mean,
                                              lower_bound=self.lower_bound,
                                              upper_bound=self.upper_bound)
-            elif space is 'logit':
+            elif space == 'logit':
                 self._trans_prior_mean = logit(prior_mean,
                                                lower_bound=self.lower_bound,
                                                upper_bound=self.upper_bound)
@@ -1057,13 +1057,13 @@ class Parameter(object):
 
         if trans_prior_mean is not None:
             space = self.space
-            if space is 'native':
+            if space == 'native':
                 self._prior_mean = trans_prior_mean
-            elif space is 'log':
+            elif space == 'log':
                 self._prior_mean = exp(trans_prior_mean,
                                        lower_bound=self.lower_bound,
                                        upper_bound=self.upper_bound)
-            elif space is 'logit':
+            elif space == 'logit':
                 self._prior_mean = sgm(trans_prior_mean,
                                        lower_bound=self.lower_bound,
                                        upper_bound=self.upper_bound)
