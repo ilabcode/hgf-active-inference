@@ -38,7 +38,6 @@
 #-- Setup --#
 #############
 
-import sys
 import hgf
 import os
 import numpy as np
@@ -56,9 +55,9 @@ from scipy.signal import convolve
 
 #-- Plotting --#
 #Set whether to generate a gif
-make_gif = False
+make_gif = True
 #Speed of the gif
-gif_frame_duration = 0.6
+gif_frame_duration = 0.4
 #Scaling parameter for plotting 
 circle_scale = 10
 
@@ -78,18 +77,18 @@ n_timesteps = 200
 #The distribution which the target volatility is sampled from
 volatility_vector = [10,120,10,120,10]
 #The drift of the target (corresponding to rho1 in the hgf)
-target_position_drift = 0.5
+target_position_drift = 1
 #The initial position of agent and target (correpsonding to initial_mu1 in the hgf)
 init_target_position = 0
 init_agent_position = 0
 
 #-- Agent --#
 #Noise when the agent observes the target's and its own position (root of the exponentiated omega_input in the hgf)
-target_position_observation_noise = np.sqrt(np.exp(4))
+target_position_observation_noise = np.sqrt(np.exp(3))
 agent_position_observation_noise = 0
 
 #Parameters for the hgf
-hgf_input_noise = 4
+hgf_input_noise = 3
 hgf_input_precision = np.exp(-hgf_input_noise)
 
 hgf_target_position = hgf.StandardHGF(  initial_mu1=0,
@@ -100,7 +99,7 @@ hgf_target_position = hgf.StandardHGF(  initial_mu1=0,
                                         initial_pi2=1e1,
                                         omega2=-2,
                                         omega_input=hgf_input_noise,
-                                        rho1 = 0.5,
+                                        rho1 = 1,
                                         rho2 = 0)
 
 
