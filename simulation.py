@@ -362,6 +362,7 @@ plt.show()
 if make_gif:
     #Make GIF single plots
     plots_filenames = []
+    Path('gifpics').mkdir(parents=True, exist_ok=True)
 
     for timestep in range(n_timesteps):
         #Make and save plot of that timepoint
@@ -383,7 +384,7 @@ if make_gif:
             image = imageio.imread('gifpics/' + filename + '.png')
             writer.append_data(image)
             os.remove('gifpics/' + filename + '.png')
-            os.rmdir('gifpics')
+        os.rmdir('gifpics')
 
 
 
