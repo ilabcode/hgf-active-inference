@@ -39,7 +39,6 @@
 #############
 
 import sys
-sys.path.append('ghgf')
 import hgf
 import os
 import numpy as np
