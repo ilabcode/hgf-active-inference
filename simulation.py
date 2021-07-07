@@ -50,14 +50,6 @@ from scipy.stats import t as students_t
 from scipy.stats import norm
 from scipy.signal import convolve
 
-#observed position: as points
-#Size up a bit
-
-#Three plots in total
-#Remove generating mean from circle plot
-#Have gif on the line plot with moving dots
-#Green is observed target position, blue is observed agent position
-
 ################
 #-- Settings --#
 ################

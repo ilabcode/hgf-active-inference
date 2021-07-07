@@ -1,12 +1,12 @@
 # hgf.py
-"""The HGF time series model."""
+#"""The HGF time series model."""
 
 import numpy as np
 import warnings
 
 
 # Turn warnings into exceptions
-warnings.simplefilter('error')
+#warnings.simplefilter('error')
 
 
 # Generic HGF model
