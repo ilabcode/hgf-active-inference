@@ -1,45 +1,10 @@
-#Questions:
-# Is surprise only scored relative to the goal prior ? 
-#   Ie is there no epistemic component ? - REMARK ON THIS
-# Same with expected surprise
-#   Compared to the MDP version
-# Should the agent move with a softmax or to the lowest epxected surprise ?
-# Would it be nice to compare epxlicitly to MDP's ?
-# Goal prior:
-#   On one hand: range of places to move (x_coordinates);
-#   on other hand: range of places where the target might be;
-#   on third hand: goal prior over distances between those two;
-#   On fourth hand: predictive posterior distribution over placea the target might go;
-#   On fifth hand: expected surprisal distribution over places the agent might go
-#   Should we make it into a proper 2D distribution?
-
-#Extensions:
-# Think further ahead (time horizon)
-# Add softmax or sampling to the decision
-# Plot predictive distribution on circle
-# Add a parent to the volatility (or just blocks with varying volatility)
-# Add preferences for movement length
-# Infer own position
-# Make things happen on an actual circle (modulo or radians)
-# Make the agent's observations depend on the distance to the target (or another kind of epistemic action component)
-# Make the agent able to affect the hidden states (maybe the target's drift?)
-# Learn hgf parameters (training period or online)
-# Select prior preferences through evolution
-# Making the target an agent that tries to run away
-# Exploring parameter space
-#    Noise
-#    Drift
-#    Goal priors
-
-#To Do:
-### Be explicit: predictive posterior for all observation modalities given control state
-
 #############
 #-- Setup --#
 #############
 
 import hgf
 import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -160,6 +125,7 @@ def save_plot_single_timestep(  timepoint,
     plt.ylim([-1.1, 1.1])
 
     #Save the figure as the filename
+    Path('gifpics').mkdir(parents=True, exist_ok=True)
     plt.savefig('gifpics/' + filename)
     plt.close()
 
@@ -335,7 +301,6 @@ for predictive_measure in ['pp_mean', 'pp_ci_lower', 'pp_ci_upper', 'agent_actio
 plotting_df['timestep'] = plotting_df.index + 1
 
 
-
 #-- HGF inference of position --#
 plt.figure(figsize=(12,5))
 plt.title('Prediction and following of target position')
@@ -360,8 +325,6 @@ plt.legend(l1+['Inference uncertainty'] + ['Predictive uncertainty'], loc=2)
 plt.show()
 
 
-
-
 #-- HGF inference of volatility --#
 plt.figure(figsize=(12,5))
 plt.title('HGF inference on target volatility')
@@ -381,8 +344,6 @@ plt.legend(l1+['Inference uncertainty'], loc=2)
 plt.show()
 
 
-
-
 #-- Goal Prior surprisal --#
 plt.figure(figsize=(12,5))
 plt.title('Goal prior surprisal')
@@ -395,74 +356,6 @@ ax1 = plotting_df.agent_surprisal.rolling(5).mean().plot(color='darkred', grid=T
 h1, l1 = ax1.get_legend_handles_labels()
 plt.legend(l1, loc=2)
 plt.show()
-
-
-
-
-# #-- HGF inference of position --#
-# plt.figure(figsize=(12,5))
-# plt.title('HGF inference on target position')
-# plt.ylabel('Position')
-# plt.xlabel('Timestep')
-
-# ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
-# ax1 = plotting_df.target_positions.plot(color='darkblue', grid=True, label='Actual Position')
-# ax1 = plotting_df.inferred_target_positions.plot(color='teal', grid=True, label='Inferred Position')
-
-# plt.fill_between(   plotting_df.observed_target_positions.index,
-#                     plotting_df.inferred_target_positions - plotting_df.uncertainty_target_positions,
-#                     plotting_df.inferred_target_positions + plotting_df.uncertainty_target_positions,
-#                     color = 'teal', alpha = .2)
-
-# h1, l1 = ax1.get_legend_handles_labels()
-# plt.legend(l1+['Inference uncertainty'], loc=2)
-# plt.show()
-
-
-# #-- Predictive posterior --#
-# plt.figure(figsize=(12,5))
-# plt.title('Predictive posterior over observations of target')
-# plt.ylabel('Position')
-# plt.xlabel('Timestep')
-
-# ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Position')
-# ax1 = plotting_df.pp_mean.plot(color='teal', grid=True, label='Predictive Posterior Mean')
-
-# plt.fill_between(   plotting_df.observed_target_positions.index,
-#                     plotting_df.pp_ci_lower,
-#                     plotting_df.pp_ci_upper,
-#                     color = 'teal', alpha = .2)
-
-# h1, l1 = ax1.get_legend_handles_labels()
-# plt.legend(l1+['{}% Confidence Intervals'.format(
-#                 round((pp_ci_upper-pp_ci_lower)*100)
-#                 )], loc=2)
-# plt.show()
-
-
-# #-- Agent actions --#
-# plt.figure(figsize=(12,5))
-# plt.title('Agent actions')
-# plt.ylabel('Position')
-# plt.xlabel('Timestep')
-
-# ax1 = plotting_df.observed_target_positions.plot(color='darkgrey', grid=True, label='Observed Target Position')
-# ax1 = plotting_df.agent_action_mean.plot(color='teal', grid=True, label='Highest Probability Action')
-# ax1 = plotting_df.agent_actions.plot(color='teal', grid=True, label='Agent Action')
-
-# plt.fill_between(   plotting_df.observed_target_positions.index,
-#                     plotting_df.agent_action_lower,
-#                     plotting_df.agent_action_upper,
-#                     color = 'teal', alpha = .2)
-
-# h1, l1 = ax1.get_legend_handles_labels()
-
-# plt.legend(l1 
-# + ['Action {}% probability interval'.format(
-#                 round((action_probability_interval_upper-action_probability_interval_lower)*100)
-#                 )]
-#                 , loc=2)
-# plt.show()
 
 
 #-- GIF --#
@@ -490,6 +383,7 @@ if make_gif:
             image = imageio.imread('gifpics/' + filename + '.png')
             writer.append_data(image)
             os.remove('gifpics/' + filename + '.png')
+            os.rmdir('gifpics')
 
 
 
