@@ -34,7 +34,6 @@
 #To Do:
 ### Be explicit: predictive posterior for all observation modalities given control state
 
-
 #############
 #-- Setup --#
 #############
